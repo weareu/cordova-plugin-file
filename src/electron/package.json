@@ -1,5 +1,6 @@
 {
     "name": "cordova-plugin-file",
+    "main": "./File.js",
     "cordova": {
         "id": "cordova-plugin-file",
         "serviceName": "File"
