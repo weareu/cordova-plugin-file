@@ -24,6 +24,7 @@
 
 const nodePath = require('path');
 const fs = require('fs');
+const promisify = require('util').promisify;
 const app = require('electron').app;
 
 const File = require('../../www/File');
@@ -42,376 +43,336 @@ const pathsPrefix = {
 /** * Exported functionality ***/
 
 // list a directory's contents (files and folders).
-exports.readEntries = function (successCallback, errorCallback, args) {
+exports.readEntries = function (args) {
     const fullPath = args[0];
 
-    if (typeof successCallback !== 'function') {
-        throw Error('Expected successCallback argument.');
-    }
-
-    fs.readdir(fullPath, {withFileTypes: true}, (err, files) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
+    return new Promise(function (resolve, reject) {
+        fs.readdir(fullPath, {withFileTypes: true}, (err, files) => {
+            if (err) {
+                reject(FileError.NOT_FOUND_ERR);
+                return;
             }
-            return;
-        }
-        const result = [];
-        files.forEach(d => {
-            let path = fullPath + d.name;
-            if (d.isDirectory()) {
-                path += nodePath.sep;
-            }
-            result.push({
-                isDirectory: d.isDirectory(),
-                isFile: d.isFile(),
-                name: d.name,
-                fullPath: path,
-                filesystemName: 'temporary',
-                nativeURL: path
+            const result = [];
+            files.forEach(d => {
+                let path = fullPath + d.name;
+                if (d.isDirectory()) {
+                    path += nodePath.sep;
+                }
+                result.push({
+                    isDirectory: d.isDirectory(),
+                    isFile: d.isFile(),
+                    name: d.name,
+                    fullPath: path,
+                    filesystemName: 'temporary',
+                    nativeURL: path
+                });
             });
+            resolve(result);
         });
-        successCallback(result);
     });
 };
 
-exports.getFile = function (successCallback, errorCallback, args) {
+exports.getFile = function (args) {
     const path = args[0] + args[1];
     const options = args[2] || {};
 
-    fs.stat(path, (err, stats) => {
-        if (err && err.code !== 'ENOENT') {
-            if (errorCallback) {
-                errorCallback(FileError.INVALID_STATE_ERR);
+    return new Promise(function (resolve, reject) {
+        fs.stat(path, (err, stats) => {
+            if (err && err.code !== 'ENOENT') {
+                reject(FileError.INVALID_STATE_ERR);
+                return;
             }
-            return;
-        }
-        const exists = !err;
-        const baseName = require('path').basename(path);
-
-        function createFile () {
-            fs.open(path, 'w', (err, fd) => {
-                if (err) {
-                    if (errorCallback) {
-                        errorCallback(FileError.INVALID_STATE_ERR);
-                    }
-                    return;
-                }
-                fs.close(fd, (err) => {
+            const exists = !err;
+            const baseName = require('path').basename(path);
+    
+            function createFile () {
+                fs.open(path, 'w', (err, fd) => {
                     if (err) {
-                        if (errorCallback) {
-                            errorCallback(FileError.INVALID_STATE_ERR);
-                        }
+                        reject(FileError.INVALID_STATE_ERR);
                         return;
                     }
-                    successCallback(new FileEntry(baseName, path));
+                    fs.close(fd, (err) => {
+                        if (err) {
+                            reject(FileError.INVALID_STATE_ERR);
+                            return;
+                        }
+                        resolve(new FileEntry(baseName, path));
+                    });
                 });
-            });
-        }
-
-        if (options.create === true && options.exclusive === true && exists) {
-            // If create and exclusive are both true, and the path already exists,
-            // getFile must fail.
-            if (errorCallback) {
-                errorCallback(FileError.PATH_EXISTS_ERR);
             }
-        } else if (options.create === true && !exists) {
-            // If create is true, the path doesn't exist, and no other error occurs,
-            // getFile must create it as a zero-length file and return a corresponding
-            // FileEntry.
-            createFile();
-        } else if (options.create === true && exists) {
-            if (stats.isFile()) {
-                // Overwrite file, delete then create new.
+    
+            if (options.create === true && options.exclusive === true && exists) {
+                // If create and exclusive are both true, and the path already exists,
+                // getFile must fail.
+                reject(FileError.PATH_EXISTS_ERR);
+            } else if (options.create === true && !exists) {
+                // If create is true, the path doesn't exist, and no other error occurs,
+                // getFile must create it as a zero-length file and return a corresponding
+                // FileEntry.
                 createFile();
-            } else {
-                if (errorCallback) {
-                    errorCallback(FileError.INVALID_MODIFICATION_ERR);
+            } else if (options.create === true && exists) {
+                if (stats.isFile()) {
+                    // Overwrite file, delete then create new.
+                    createFile();
+                } else {
+                    reject(FileError.INVALID_MODIFICATION_ERR);
                 }
+            } else if (!options.create && !exists) {
+                // If create is not true and the path doesn't exist, getFile must fail.
+                reject(FileError.NOT_FOUND_ERR);
+            } else if (!options.create && exists && stats.isDirectory()) {
+                // If create is not true and the path exists, but is a directory, getFile
+                // must fail.
+                reject(FileError.TYPE_MISMATCH_ERR);
+            } else {
+                // Otherwise, if no other error occurs, getFile must return a FileEntry
+                // corresponding to path.
+                resolve(new FileEntry(baseName, path));
             }
-        } else if (!options.create && !exists) {
-            // If create is not true and the path doesn't exist, getFile must fail.
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
-            }
-        } else if (!options.create && exists && stats.isDirectory()) {
-            // If create is not true and the path exists, but is a directory, getFile
-            // must fail.
-            if (errorCallback) {
-                errorCallback(FileError.TYPE_MISMATCH_ERR);
-            }
-        } else {
-            // Otherwise, if no other error occurs, getFile must return a FileEntry
-            // corresponding to path.
-            successCallback(new FileEntry(baseName, path));
-        }
-    });
-};
-
-exports.getFileMetadata = function (successCallback, errorCallback, args) {
-    const fullPath = args[0];
-    fs.stat(fullPath, (err, stats) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
-            }
-            return;
-        }
-        const baseName = require('path').basename(fullPath);
-        successCallback(new File(baseName, fullPath, '', stats.mtime, stats.size));
-    });
-};
-
-exports.getMetadata = function (successCallback, errorCallback, args) {
-    fs.stat(args[0], (err, stats) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
-            }
-            return;
-        }
-        successCallback({
-            modificationTime: stats.mtime,
-            size: stats.size
         });
     });
 };
 
-exports.setMetadata = function (successCallback, errorCallback, args) {
+exports.getFileMetadata = function (args) {
     const fullPath = args[0];
-    const metadataObject = args[1];
 
-    fs.utime(fullPath, metadataObject.modificationTime, metadataObject.modificationTime, (err) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
+    return new Promise(function (resolve, reject) {
+        fs.stat(fullPath, (err, stats) => {
+            if (err) {
+                reject(FileError.NOT_FOUND_ERR);
+                return;
             }
-            return;
-        }
-        successCallback();
+            const baseName = require('path').basename(fullPath);
+            resolve(new File(baseName, fullPath, '', stats.mtime, stats.size));
+        });
     });
 };
 
-exports.write = function (successCallback, errorCallback, args) {
+exports.getMetadata = function (args) {
+    return new Promise(function (resolve, reject) {
+        fs.stat(args[0], (err, stats) => {
+            if (err) {
+                reject(FileError.NOT_FOUND_ERR);
+                return;
+            }
+            resolve({
+                modificationTime: stats.mtime,
+                size: stats.size
+            });
+        });
+    });
+};
+
+exports.setMetadata = function (args) {
+    const fullPath = args[0];
+    const metadataObject = args[1];
+    return new Promise(function (resolve, reject) {
+        fs.utime(fullPath, metadataObject.modificationTime, metadataObject.modificationTime, (err) => {
+            if (err) {
+                reject(FileError.NOT_FOUND_ERR);
+                return;
+            }
+            resolve();
+        });
+    });
+};
+
+exports.write = function (args) {
     const fileName = args[0];
     const data = args[1];
     const position = args[2];
 
     if (!data) {
-        if (errorCallback) {
-            errorCallback(FileError.INVALID_MODIFICATION_ERR);
-        }
-        return;
+        return Promise.reject(FileError.INVALID_MODIFICATION_ERR);
     }
 
     const buf = Buffer.from(data);
-    const promisify = require('util').promisify;
     let bytesWritten = 0;
-    promisify(fs.open)(fileName, 'a')
+    return promisify(fs.open)(fileName, 'a')
         .then(fd => {
             return promisify(fs.write)(fd, buf, 0, buf.length, position)
                         .then(bw => { bytesWritten = bw; })
                         .finally(() => promisify(fs.close)(fd));
         })
-        .then(() => successCallback(bytesWritten))
-        .catch(() => {
-            if (errorCallback) {
-                errorCallback(FileError.INVALID_MODIFICATION_ERR);
-            }
-        });
+        .then(() => bytesWritten);
 };
 
-exports.readAsText = function (successCallback, errorCallback, args) {
+exports.readAsText = function (args) {
     const fileName = args[0];
     const enc = args[1];
     const startPos = args[2];
     const endPos = args[3];
 
-    readAs('text', fileName, enc, startPos, endPos, successCallback, errorCallback);
+    return readAs('text', fileName, enc, startPos, endPos);
 };
 
-exports.readAsDataURL = function (successCallback, errorCallback, args) {
+exports.readAsDataURL = function (args) {
     const fileName = args[0];
     const startPos = args[1];
     const endPos = args[2];
 
-    readAs('dataURL', fileName, null, startPos, endPos, successCallback, errorCallback);
+    return readAs('dataURL', fileName, null, startPos, endPos);
 };
 
-exports.readAsBinaryString = function (successCallback, errorCallback, args) {
+exports.readAsBinaryString = function (args) {
     const fileName = args[0];
     const startPos = args[1];
     const endPos = args[2];
 
-    readAs('binaryString', fileName, null, startPos, endPos, successCallback, errorCallback);
+    return readAs('binaryString', fileName, null, startPos, endPos);
 };
 
-exports.readAsArrayBuffer = function (successCallback, errorCallback, args) {
+exports.readAsArrayBuffer = function (args) {
     const fileName = args[0];
     const startPos = args[1];
     const endPos = args[2];
 
-    readAs('arrayBuffer', fileName, null, startPos, endPos, successCallback, errorCallback);
+    return readAs('arrayBuffer', fileName, null, startPos, endPos);
 };
 
-exports.remove = function (successCallback, errorCallback, args) {
+exports.remove = function (args) {
     const fullPath = args[0];
 
-    fs.stat(fullPath, (err, stats) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
-            }
-            return;
-        }
-        const rm = stats.isDirectory() ? fs.rmdir : fs.unlink;
-        rm(fullPath, (err) => {
+    return new Promise(function (resolve, reject) {
+        fs.stat(fullPath, (err, stats) => {
             if (err) {
-                if (errorCallback) {
-                    errorCallback(FileError.NO_MODIFICATION_ALLOWED_ERR);
-                }
+                reject(FileError.NOT_FOUND_ERR);
                 return;
             }
-            successCallback();
+            const rm = stats.isDirectory() ? fs.rmdir : fs.unlink;
+            rm(fullPath, (err) => {
+                if (err) {
+                    reject(FileError.NO_MODIFICATION_ALLOWED_ERR);
+                    return;
+                }
+                resolve();
+            });
         });
     });
 };
 
-exports.truncate = function (successCallback, errorCallback, args) {
+exports.truncate = function (args) {
     const fullPath = args[0];
     const size = args[1];
 
-    fs.truncate(fullPath, size, err => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.INVALID_STATE_ERR);
-            }
-            return;
-        }
-        successCallback(size);
-    });
-};
-
-exports.removeRecursively = function (successCallback, errorCallback, args) {
-    const fullPath = args[0];
-
-    fs.stat(fullPath, (err, stats) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
-            }
-            return;
-        }
-        const rm = stats.isDirectory() ? fs.rmdir : fs.unlink;
-        rm(fullPath, (err) => {
+    return new Promise(function (resolve, reject) {
+        fs.truncate(fullPath, size, err => {
             if (err) {
-                if (errorCallback) {
-                    errorCallback(FileError.NO_MODIFICATION_ALLOWED_ERR);
-                }
+                reject(FileError.INVALID_STATE_ERR);
                 return;
             }
-            successCallback();
-        },  { recursive: true, force: true });
+            resolve(size);
+        });
     });
 };
 
-exports.getDirectory = function (successCallback, errorCallback, args) {
+exports.removeRecursively = function (args) {
+    const fullPath = args[0];
+
+    return new Promise(function (resolve, reject) {
+        fs.stat(fullPath, (err, stats) => {
+            if (err) {
+                reject(FileError.NOT_FOUND_ERR);
+                return;
+            }
+            const rm = stats.isDirectory() ? fs.rmdir : fs.unlink;
+            rm(fullPath, (err) => {
+                if (err) {
+                    reject(FileError.NO_MODIFICATION_ALLOWED_ERR);
+                    return;
+                }
+                resolve();
+            },  { recursive: true, force: true });
+        });
+    });
+};
+
+exports.getDirectory = function (args) {
     const path = args[0] + args[1];
     const options = args[2] || {};
 
-    fs.stat(path, (err, stats) => {
-        if (err && err.code !== 'ENOENT') {
-            if (errorCallback) {
-                errorCallback(FileError.INVALID_STATE_ERR);
+    return new Promise(function (resolve, reject) {
+        fs.stat(path, (err, stats) => {
+            if (err && err.code !== 'ENOENT') {
+                reject(FileError.INVALID_STATE_ERR);
+                return;
             }
-            return;
-        }
-        const exists = !err;
-        const baseName = require('path').basename(path);
 
-        if (options.create === true && options.exclusive === true && exists) {
-            // If create and exclusive are both true, and the path already exists,
-            // getDirectory must fail.
-            if (errorCallback) {
-                errorCallback(FileError.PATH_EXISTS_ERR);
-            }
-        } else if (options.create === true && !exists) {
-            // If create is true, the path doesn't exist, and no other error occurs,
-            // getDirectory must create it as a zero-length file and return a corresponding
-            // MyDirectoryEntry.
-            fs.mkdir(path, (err) => {
-                if (err) {
-                    if (errorCallback) {
-                        errorCallback(FileError.PATH_EXISTS_ERR);
+            const exists = !err;
+            const baseName = require('path').basename(path);
+
+            if (options.create === true && options.exclusive === true && exists) {
+                // If create and exclusive are both true, and the path already exists,
+                // getDirectory must fail.
+                reject(FileError.PATH_EXISTS_ERR);
+            } else if (options.create === true && !exists) {
+                // If create is true, the path doesn't exist, and no other error occurs,
+                // getDirectory must create it as a zero-length file and return a corresponding
+                // MyDirectoryEntry.
+                fs.mkdir(path, (err) => {
+                    if (err) {
+                        reject(FileError.PATH_EXISTS_ERR);
+                        return;
                     }
-                    return;
+                    resolve(new DirectoryEntry(baseName, path));
+                });
+            } else if (options.create === true && exists) {
+                if (stats.isDirectory()) {
+                    resolve(new DirectoryEntry(baseName, path));
+                } else {
+                    reject(FileError.INVALID_MODIFICATION_ERR);
                 }
-                successCallback(new DirectoryEntry(baseName, path));
-            });
-        } else if (options.create === true && exists) {
-            if (stats.isDirectory()) {
-                successCallback(new DirectoryEntry(baseName, path));
-            } else if (errorCallback) {
-                errorCallback(FileError.INVALID_MODIFICATION_ERR);
+            } else if (!options.create && !exists) {
+                // If create is not true and the path doesn't exist, getDirectory must fail.
+                reject(FileError.NOT_FOUND_ERR);
+            } else if (!options.create && exists && stats.isFile()) {
+                // If create is not true and the path exists, but is a file, getDirectory
+                // must fail.
+                reject(FileError.TYPE_MISMATCH_ERR);
+            } else {
+                // Otherwise, if no other error occurs, getDirectory must return a
+                // DirectoryEntry corresponding to path.
+                resolve(new DirectoryEntry(baseName, path));
             }
-        } else if (!options.create && !exists) {
-            // If create is not true and the path doesn't exist, getDirectory must fail.
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
-            }
-        } else if (!options.create && exists && stats.isFile()) {
-            // If create is not true and the path exists, but is a file, getDirectory
-            // must fail.
-            if (errorCallback) {
-                errorCallback(FileError.TYPE_MISMATCH_ERR);
-            }
-        } else {
-            // Otherwise, if no other error occurs, getDirectory must return a
-            // DirectoryEntry corresponding to path.
-            successCallback(new DirectoryEntry(baseName, path));
-        }
+        });
     });
 };
 
-exports.getParent = function (successCallback, errorCallback, args) {
-    if (typeof successCallback !== 'function') {
-        throw Error('Expected successCallback argument.');
-    }
-
+exports.getParent = function (args) {
     const parentPath = nodePath.dirname(args[0]);
     const parentName = nodePath.basename(parentPath);
     const path = nodePath.dirname(parentPath) + nodePath.sep;
 
-    exports.getDirectory(successCallback, errorCallback, [path, parentName, {create: false}]);
+    return exports.getDirectory([path, parentName, {create: false}]);
 };
 
-exports.copyTo = function (successCallback, errorCallback, args) {
+exports.copyTo = function (args) {
     const srcPath = args[0];
     const dstDir = args[1];
     const dstName = args[2];
 
-    fs.copyFile(srcPath, dstDir + dstName, (err) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.INVALID_MODIFICATION_ERR);
+    return new Promise(function (resolve, reject) {
+        fs.copyFile(srcPath, dstDir + dstName, (err) => {
+            if (err) {
+                reject(FileError.INVALID_MODIFICATION_ERR);
+                return;
             }
-            return;
-        }
-        exports.getFile(successCallback, errorCallback, [dstDir, dstName]);
+            exports.getFile([dstDir, dstName]).then(resolve).catch(reject);
+        });
     });
 };
 
-exports.moveTo = function (successCallback, errorCallback, args) {
+exports.moveTo = function (args) {
     const srcPath = args[0];
-    exports.copyTo(function (fileEntry) {
-        exports.remove(function () {
-            successCallback(fileEntry);
-        }, errorCallback, [srcPath]);
-
-    }, errorCallback, args);
+    
+    return exports.copyTo(args).then(function (fileEntry) {
+        return exports.remove([srcPath]).then(function() {
+            return fileEntry;
+        });
+    });
 };
 
-exports.resolveLocalFileSystemURI = function (successCallback, errorCallback, args) {
+exports.resolveLocalFileSystemURI = function (args) {
     let path = args[0];
 
     // support for encodeURI
@@ -422,9 +383,7 @@ exports.resolveLocalFileSystemURI = function (successCallback, errorCallback, ar
     // support for cdvfile
     if (path.trim().substr(0, 7) === 'cdvfile') {
         if (path.indexOf('cdvfile://localhost') === -1) {
-            if (errorCallback) {
-                errorCallback(FileError.ENCODING_ERR);
-            }
+            Promise.reject(FileError.ENCODING_ERR);
             return;
         }
 
@@ -439,69 +398,62 @@ exports.resolveLocalFileSystemURI = function (successCallback, errorCallback, ar
         } else if (indexTemporary !== -1) { // cdvfile://localhost/temporary/path/to/file
             path = pathsPrefix.tempDirectory + path.substr(indexTemporary + 10);
         } else {
-            if (errorCallback) {
-                errorCallback(FileError.ENCODING_ERR);
-            }
-            return;
+            return Promise.reject(FileError.ENCODING_ERR);
         }
     }
 
-    fs.stat(path, (err, stats) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
+    return new Promise(function(resolve, reject) {
+        fs.stat(path, (err, stats) => {
+            if (err) {
+                reject(FileError.NOT_FOUND_ERR);
+                return;
             }
-            return;
-        }
-
-        const baseName = require('path').basename(path);
-        if (stats.isDirectory()) {
-            successCallback(new DirectoryEntry(baseName, path));
-        } else {
-            successCallback(new FileEntry(baseName, path));
-        }
+    
+            const baseName = require('path').basename(path);
+            if (stats.isDirectory()) {
+                resolve(new DirectoryEntry(baseName, path));
+            } else {
+                resolve(new FileEntry(baseName, path));
+            }
+        });
     });
+    
 };
 
-exports.requestAllPaths = function () {
-    successCallback(pathsPrefix);
+exports.requestAllPaths = function() {
+    return Promise.resolve(pathsPrefix);
 };
 
 /** * Helpers ***/
-
-function readAs (what, fullPath, encoding, startPos, endPos, successCallback, errorCallback) {
-    const promisify = require('util').promisify;
-
-    fs.open(fullPath, 'r', (err, fd) => {
-        if (err) {
-            if (errorCallback) {
-                errorCallback(FileError.NOT_FOUND_ERR);
+function readAs (what, fullPath, encoding, startPos, endPos) {
+    return new Promise(function (resolve, reject) {
+        fs.open(fullPath, 'r', (err, fd) => {
+            if (err) {
+                reject(FileError.NOT_FOUND_ERR);
+                return;
             }
-            return;
-        }
-        const buf = Buffer.alloc(endPos - startPos);
-        promisify(fs.read)(fd, buf, 0, buf.length, startPos)
-            .then(() => {
-                switch (what) {
-                case 'text':
-                    successCallback(buf.toString(encoding));
-                    break;
-                case 'dataURL':
-                    successCallback('data:;base64,' + buf.toString('base64'));
-                    break;
-                case 'arrayBuffer':
-                    successCallback(buf);
-                    break;
-                case 'binaryString':
-                    successCallback(buf.toString('binary'));
-                    break;
-                }
-            })
-            .catch(() => {
-                if (errorCallback) {
-                    errorCallback(FileError.NOT_READABLE_ERR);
-                }
-            })
-            .then(() => promisify(fs.close)(fd));
+            const buf = Buffer.alloc(endPos - startPos);
+            promisify(fs.read)(fd, buf, 0, buf.length, startPos)
+                .then(() => {
+                    switch (what) {
+                    case 'text':
+                        resolve(buf.toString(encoding));
+                        break;
+                    case 'dataURL':
+                        resolve('data:;base64,' + buf.toString('base64'));
+                        break;
+                    case 'arrayBuffer':
+                        resolve(buf);
+                        break;
+                    case 'binaryString':
+                        resolve(buf.toString('binary'));
+                        break;
+                    }
+                })
+                .catch(() => {
+                    reject(FileError.NOT_READABLE_ERR);
+                })
+                .then(() => promisify(fs.close)(fd));
+        });
     });
 }
