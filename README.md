@@ -67,6 +67,7 @@ Although the object is in the global scope, it is not available to applications 
 - OS X
 - Windows*
 - Browser
+- Electron
 
 \* _These platforms do not support `FileReader.readAsArrayBuffer` nor `FileWriter.write(blob)`._
 
