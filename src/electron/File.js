@@ -19,17 +19,16 @@
  *
  */
 
-//Work done by zorn-v - https://github.com/zorn-v/cordova-plugin-file/blob/electron/src/electron/FileProxy.js for electron compatibility using Node.js fs.
+//Base Work done by zorn-v - https://github.com/zorn-v/cordova-plugin-file/blob/electron/src/electron/FileProxy.js for electron compatibility using Node.js fs.
 //This version removes rimraf for recursive delete using native fs.rm with Node 14+ with recursive and force options.
 
 const nodePath = require('path');
 const fs = require('fs');
-const app = require('electron').remote.app;
+const app = require('electron').app;
 
-const FileEntry = require('../../www/FileEntry');
-const FileError = require('../../www/FileError');
-const DirectoryEntry = require('../../www/DirectoryEntry');
 const File = require('../../www/File');
+const FileError = require('../../www/FileError');
+const { FileEntry, DirectoryEntry } = require('./Types');
 
 // https://github.com/electron/electron/blob/master/docs/api/app.md#appgetpathname
 const pathsPrefix = {
@@ -464,7 +463,7 @@ exports.resolveLocalFileSystemURI = function (successCallback, errorCallback, ar
     });
 };
 
-exports.requestAllPaths = function (successCallback) {
+exports.requestAllPaths = function () {
     successCallback(pathsPrefix);
 };
 
