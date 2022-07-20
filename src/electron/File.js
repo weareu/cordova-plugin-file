@@ -26,10 +26,10 @@ const nodePath = require('path');
 const fs = require('fs');
 const app = require('electron').remote.app;
 
-const FileEntry = require('./FileEntry');
-const FileError = require('./FileError');
-const DirectoryEntry = require('./DirectoryEntry');
-const File = require('./File');
+const FileEntry = require('../../www/FileEntry');
+const FileError = require('../../www/FileError');
+const DirectoryEntry = require('../../www/DirectoryEntry');
+const File = require('../../www/File');
 
 // https://github.com/electron/electron/blob/master/docs/api/app.md#appgetpathname
 const pathsPrefix = {
