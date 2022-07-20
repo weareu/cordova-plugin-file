@@ -263,7 +263,17 @@ to config.xml in order for the application to find previously stored files.
     </platform>
 
     <platform name="electron">
-        <js-module src="www/electron/FileSystem.js" name="FileSystem">
+        <!-- Override Browser Implementations -->
+        <js-module name="Preparing">
+        </js-module>
+        
+        <js-module name="browserFileProxy">
+        </js-module>
+
+        <js-module name="fileSystemPaths">
+        </js-module>
+
+        <js-module src="www/electron/FileSystem.js" name="firefoxFileSystem">
             <merges target="window.FileSystem" />
         </js-module>
 
