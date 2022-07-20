@@ -10,7 +10,8 @@
       "browser",
       "ios",
       "osx",
-      "windows"
+      "windows",
+      "electron"
     ]
   },
   "repository": "github:apache/cordova-plugin-file",
