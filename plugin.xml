@@ -264,13 +264,13 @@ to config.xml in order for the application to find previously stored files.
 
     <platform name="electron">
         <!-- Override Browser Implementations -->
-        <js-module name="Preparing">
+        <js-module src="www/electron/Blank.js" name="Preparing">
         </js-module>
         
-        <js-module name="browserFileProxy">
+        <js-module src="www/electron/Blank.js" name="browserFileProxy">
         </js-module>
 
-        <js-module name="fileSystemPaths">
+        <js-module src="www/electron/Blank.js" name="fileSystemPaths">
         </js-module>
 
         <js-module src="www/electron/FileSystem.js" name="firefoxFileSystem">
