@@ -1,0 +1,10 @@
+{
+    "name": "cordova-plugin-file",
+    "cordova": {
+        "id": "cordova-plugin-file",
+        "serviceName": "File"
+    },
+    "dependencies": {
+        
+    }
+}

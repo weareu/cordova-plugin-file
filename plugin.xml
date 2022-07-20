@@ -262,4 +262,11 @@ to config.xml in order for the application to find previously stored files.
         </js-module>
     </platform>
 
+    <platform name="electron">
+        <js-module src="www/FileSystem.js" name="FileSystem">
+            <clobbers target="window.FileSystem" />
+        </js-module>
+
+        <framework src="./src/electron" />
+    </platform>
 </plugin>
