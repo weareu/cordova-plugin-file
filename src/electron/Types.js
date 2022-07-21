@@ -18,7 +18,7 @@
  * under the License.
  *
 */
-
+'use strict';
 
 /**
  * Extends a child object from a parent object using classical inheritance
@@ -86,6 +86,7 @@
 
     FileEntry.__super__.constructor.apply(this, [true, false, name, fullPath, fileSystem, nativeURL]);
 };
+extend(FileEntry, Entry);
 
 /**
  * An interface representing a directory on the file system.
@@ -107,7 +108,36 @@
     }
     DirectoryEntry.__super__.constructor.call(this, false, true, name, fullPath, fileSystem, nativeURL);
 };
+extend(DirectoryEntry, Entry);
+
+/**
+ * FileError
+ */
+function FileError (error, message) {
+    this.code = error || null;
+    this.message = message || (this.code ? Object.keys(FileError).filter((k) => FileError[k] === this.code)[0] : null);
+}
+
+// File error codes
+// Found in DOMException
+FileError.NOT_FOUND_ERR = 1;
+FileError.SECURITY_ERR = 2;
+FileError.ABORT_ERR = 3;
+
+// Added by File API specification
+FileError.NOT_READABLE_ERR = 4;
+FileError.ENCODING_ERR = 5;
+FileError.NO_MODIFICATION_ALLOWED_ERR = 6;
+FileError.INVALID_STATE_ERR = 7;
+FileError.SYNTAX_ERR = 8;
+FileError.INVALID_MODIFICATION_ERR = 9;
+FileError.QUOTA_EXCEEDED_ERR = 10;
+FileError.TYPE_MISMATCH_ERR = 11;
+FileError.PATH_EXISTS_ERR = 12;
+
+extend(FileError, Error);
 
 exports.Entry = Entry;
-exports.FileEntry = extend(FileEntry, Entry);
-exports.DirectoryEntry = extend(DirectoryEntry, Entry);
+exports.FileEntry = FileEntry;
+exports.FileError = FileError;
+exports.DirectoryEntry = DirectoryEntry;

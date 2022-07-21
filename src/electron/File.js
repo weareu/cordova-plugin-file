@@ -18,6 +18,7 @@
  * under the License.
  *
  */
+'use strict';
 
 //Base Work done by zorn-v - https://github.com/zorn-v/cordova-plugin-file/blob/electron/src/electron/FileProxy.js for electron compatibility using Node.js fs.
 //This version removes rimraf for recursive delete using native fs.rm with Node 14+ with recursive and force options.
@@ -27,23 +28,36 @@ const fs = require('fs');
 const promisify = require('util').promisify;
 const app = require('electron').app;
 
-const File = require('../../www/File');
-const FileError = require('../../www/FileError');
-const { FileEntry, DirectoryEntry } = require('./Types');
+const JSFile = require('../../www/File');
+const { FileEntry, FileError, DirectoryEntry } = require('./Types');
 
 // https://github.com/electron/electron/blob/master/docs/api/app.md#appgetpathname
 const pathsPrefix = {
     applicationDirectory: nodePath.dirname(app.getAppPath()) + nodePath.sep,
     dataDirectory: app.getPath('userData') + nodePath.sep,
+    externalDataDirectory: app.getPath('userData') + nodePath.sep,
     cacheDirectory: app.getPath('cache') + nodePath.sep,
     tempDirectory: app.getPath('temp') + nodePath.sep,
     documentsDirectory: app.getPath('documents') + nodePath.sep
 };
 
+//Fix Cordova Electron 3.0 Args Bug. Electron context bridge uses ... for receiving args. This causes
+//args to be nested in another array when sent, this is not like other platform args and makes plugin compatibility hard. 
+// This may change in future so we'll handle it here.
+function getArgs(args) {
+    if(Array.isArray(args) && args.length === 1 && Array.isArray(args[0])) {
+        return args[0];
+    }
+    else {
+        return args;
+    }
+}
+
 /** * Exported functionality ***/
 
 // list a directory's contents (files and folders).
 exports.readEntries = function (args) {
+    args = getArgs(args);
     const fullPath = args[0];
 
     return new Promise(function (resolve, reject) {
@@ -73,6 +87,7 @@ exports.readEntries = function (args) {
 };
 
 exports.getFile = function (args) {
+    args = getArgs(args);
     const path = args[0] + args[1];
     const options = args[2] || {};
 
@@ -134,6 +149,7 @@ exports.getFile = function (args) {
 };
 
 exports.getFileMetadata = function (args) {
+    args = getArgs(args);
     const fullPath = args[0];
 
     return new Promise(function (resolve, reject) {
@@ -143,7 +159,7 @@ exports.getFileMetadata = function (args) {
                 return;
             }
             const baseName = require('path').basename(fullPath);
-            resolve(new File(baseName, fullPath, '', stats.mtime, stats.size));
+            resolve(new JSFile(baseName, fullPath, '', stats.mtime, stats.size));
         });
     });
 };
@@ -164,10 +180,11 @@ exports.getMetadata = function (args) {
 };
 
 exports.setMetadata = function (args) {
+    args = getArgs(args);
     const fullPath = args[0];
     const metadataObject = args[1];
     return new Promise(function (resolve, reject) {
-        fs.utime(fullPath, metadataObject.modificationTime, metadataObject.modificationTime, (err) => {
+        fs.utimes(fullPath, metadataObject.modificationTime, metadataObject.modificationTime, (err) => {
             if (err) {
                 reject(FileError.NOT_FOUND_ERR);
                 return;
@@ -178,6 +195,7 @@ exports.setMetadata = function (args) {
 };
 
 exports.write = function (args) {
+    args = getArgs(args);
     const fileName = args[0];
     const data = args[1];
     const position = args[2];
@@ -198,6 +216,7 @@ exports.write = function (args) {
 };
 
 exports.readAsText = function (args) {
+    args = getArgs(args);
     const fileName = args[0];
     const enc = args[1];
     const startPos = args[2];
@@ -207,6 +226,7 @@ exports.readAsText = function (args) {
 };
 
 exports.readAsDataURL = function (args) {
+    args = getArgs(args);
     const fileName = args[0];
     const startPos = args[1];
     const endPos = args[2];
@@ -215,6 +235,7 @@ exports.readAsDataURL = function (args) {
 };
 
 exports.readAsBinaryString = function (args) {
+    args = getArgs(args);
     const fileName = args[0];
     const startPos = args[1];
     const endPos = args[2];
@@ -223,6 +244,7 @@ exports.readAsBinaryString = function (args) {
 };
 
 exports.readAsArrayBuffer = function (args) {
+    args = getArgs(args);
     const fileName = args[0];
     const startPos = args[1];
     const endPos = args[2];
@@ -231,6 +253,7 @@ exports.readAsArrayBuffer = function (args) {
 };
 
 exports.remove = function (args) {
+    args = getArgs(args);
     const fullPath = args[0];
 
     return new Promise(function (resolve, reject) {
@@ -252,6 +275,7 @@ exports.remove = function (args) {
 };
 
 exports.truncate = function (args) {
+    args = getArgs(args);
     const fullPath = args[0];
     const size = args[1];
 
@@ -267,6 +291,7 @@ exports.truncate = function (args) {
 };
 
 exports.removeRecursively = function (args) {
+    args = getArgs(args);
     const fullPath = args[0];
 
     return new Promise(function (resolve, reject) {
@@ -288,6 +313,7 @@ exports.removeRecursively = function (args) {
 };
 
 exports.getDirectory = function (args) {
+    args = getArgs(args);
     const path = args[0] + args[1];
     const options = args[2] || {};
 
@@ -339,6 +365,7 @@ exports.getDirectory = function (args) {
 };
 
 exports.getParent = function (args) {
+    args = getArgs(args);
     const parentPath = nodePath.dirname(args[0]);
     const parentName = nodePath.basename(parentPath);
     const path = nodePath.dirname(parentPath) + nodePath.sep;
@@ -347,6 +374,7 @@ exports.getParent = function (args) {
 };
 
 exports.copyTo = function (args) {
+    args = getArgs(args);
     const srcPath = args[0];
     const dstDir = args[1];
     const dstName = args[2];
@@ -363,6 +391,7 @@ exports.copyTo = function (args) {
 };
 
 exports.moveTo = function (args) {
+    args = getArgs(args);
     const srcPath = args[0];
     
     return exports.copyTo(args).then(function (fileEntry) {
@@ -373,6 +402,7 @@ exports.moveTo = function (args) {
 };
 
 exports.resolveLocalFileSystemURI = function (args) {
+    args = getArgs(args);
     let path = args[0];
 
     // support for encodeURI
