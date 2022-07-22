@@ -28,8 +28,7 @@ const fs = require('fs');
 const promisify = require('util').promisify;
 const app = require('electron').app;
 
-const JSFile = require('../../www/File');
-const { FileEntry, FileError, DirectoryEntry } = require('./Types');
+const { FileEntry, FileError, JSFile, DirectoryEntry } = require('./Types');
 
 // https://github.com/electron/electron/blob/master/docs/api/app.md#appgetpathname
 const pathsPrefix = {

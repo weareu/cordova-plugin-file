@@ -110,6 +110,31 @@ extend(FileEntry, Entry);
 };
 extend(DirectoryEntry, Entry);
 
+
+/**
+ * Constructor.
+ * name {DOMString} name of the file, without path information
+ * fullPath {DOMString} the full path of the file, including the name
+ * type {DOMString} mime type
+ * lastModifiedDate {Date} last modified date
+ * size {Number} size of the file in bytes
+ */
+
+var JSFile = function (name, localURL, type, lastModifiedDate, size) {
+    this.name = name || '';
+    this.localURL = localURL || null;
+    this.type = type || null;
+    this.lastModified = lastModifiedDate || null;
+    // For backwards compatibility, store the timestamp in lastModifiedDate as well
+    this.lastModifiedDate = lastModifiedDate || null;
+    this.size = size || 0;
+
+    // These store the absolute start and end for slicing the file.
+    this.start = 0;
+    this.end = this.size;
+};
+
+
 /**
  * FileError
  */
@@ -140,4 +165,5 @@ extend(FileError, Error);
 exports.Entry = Entry;
 exports.FileEntry = FileEntry;
 exports.FileError = FileError;
+exports.JSFile = JSFile;
 exports.DirectoryEntry = DirectoryEntry;
